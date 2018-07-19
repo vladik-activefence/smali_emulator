@@ -1,4 +1,4 @@
-# {'va': u'Hello', 'ret': None, 'statMember': u'Hello'}
+# {'va': 'Hello', 'ret': None, 'statMember': 'Hello'}
 
 .field private static final statMember:Ljava/lang/String;
 
@@ -8,7 +8,7 @@ sput-object va, statMember
 
 return
 
-# {'a': [u'a', u'b', u'c'], 'i': 1, 's': u'abc', 'ret': [u'a', u'b', u'c'], 'v': u'b'}
+# {'a': ['a', 'b', 'c'], 'i': 1, 's': 'abc', 'ret': ['a', 'b', 'c'], 'v': 'b'}
 const-string s, "abc"
 const/16 a, 0
 const/16 i, 1

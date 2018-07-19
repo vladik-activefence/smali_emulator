@@ -20,12 +20,28 @@
 # or write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
+import collections
+import sys
 import pytest
+
+import smali.emulator
+import smali.classloader
 
 from .conftest import (
     opcode_calls,
-    run_source,
 )
+
+def special_cmp(a, b):
+    if a == b:
+        return True
+    elif isinstance(a, Exception):
+        return (
+            isinstance(a, b.__class__)
+            and str(a) == str(b)
+        )
+    else:
+        return False
+
 
 @pytest.mark.parametrize(
     'filename, expected_result, input_source',
@@ -33,5 +49,13 @@ from .conftest import (
 )
 def test_all_files(filename, expected_result, input_source):
     assert filename.endswith('.smali')
-    assert expected_result == run_source(input_source)
+    cl = smali.classloader.ClassLoader()
+    emulator = smali.emulator.Emulator(class_loader=cl)
+    result = emulator.run_source(input_source)
+    if expected_result.startswith('{') and expected_result.endswith('}'):
+        """Probably a dict, we convert the result"""
+        expected_result = eval(expected_result)
+        assert result == expected_result['ret']
+        assert all(special_cmp(emulator.vm[param], expected_result[param]) for param in emulator.vm.variables)
+
 

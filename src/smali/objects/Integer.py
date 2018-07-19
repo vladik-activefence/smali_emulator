@@ -16,7 +16,13 @@
 # or write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
-class Integer:
+
+from .baseclass import BaseClass
+from smali.opcodes import OpCode
+
+
+class Integer(BaseClass):
+    """Fake the java.lang.Integer class."""
     @staticmethod
     def name():
         return 'java.lang.Integer'
@@ -28,12 +34,12 @@ class Integer:
             'parseInt(Ljava/lang/String;I)I' : Integer.parseInt,
         }
 
-    
     @staticmethod
     def new_instance():
         return ""
 
     @staticmethod
     def parseInt(vm,this,args):
-        vm.return_v = int(vm[this])
-
+        val = vm[this]
+        ret = OpCode.get_int_value(val)
+        vm.return_v = ret

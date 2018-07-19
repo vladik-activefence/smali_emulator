@@ -1,4 +1,4 @@
-# {'i': 1, 's': u'hello', 'ret': u'e'}
+# {'i': 1, 's': 'hello', 'ret': 'e'}
 const-string s, "hello"
 const/12 i, 1
 

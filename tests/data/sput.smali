@@ -1,4 +1,4 @@
-# {'va': u'Hello', 'vb': u'Hello', 'ret': u'Hello', 'statMember': u'Hello'}
+# {'va': 'Hello', 'vb': 'Hello', 'ret': 'Hello', 'statMember': 'Hello'}
 
 .field private static final statMember:Ljava/lang/String;
 

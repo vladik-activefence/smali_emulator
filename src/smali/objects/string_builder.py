@@ -18,7 +18,13 @@
 # or write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
-class StringBuilder:
+from .baseclass import BaseClass
+
+class StringBuilder(BaseClass):
+    """Fake the string builder class of Java."""
+    def __init__(self, content=""):
+        self.internal = content
+
     @staticmethod
     def name():
         return 'java.lang.StringBuilder'
@@ -35,17 +41,20 @@ class StringBuilder:
 
     @staticmethod
     def new_instance():
-        return ""
+        return StringBuilder("")
 
     @staticmethod
-    def init(vm, this, args):
+    def init(args):
         pass
 
-    @staticmethod
-    def append(vm, this, args):
-        vm[this] += vm[args[0]]
-        vm.return_v = vm[this]
+    def __eq__(self, other):
+        if isinstance(other, str):
+            return (not(other) and not self.internal) or other == self.internal
+        elif isinstance(other, StringBuilder):
+            return other.internal == self.internal
 
-    @staticmethod
-    def tostring(vm, this, args):
-        vm.return_v = str(vm[this])
+    def append(self, *args):
+        self.internal += args[0]
+
+    def tostring(self):
+        return self.internal

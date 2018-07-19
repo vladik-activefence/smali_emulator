@@ -26,8 +26,7 @@ class MissingSource(Exception):
 
 
 def get_source_from_file(filename):
-    with open(filename, 'r') as fd:
-        source_code = Source(lines=fd.readlines())
+    with open(filename, 'r') as fd: source_code = Source(lines=fd.readlines())
     return source_code
 
 
@@ -36,7 +35,7 @@ class Source(object):
         if not lines:
             raise MissingSource("Missing Source Code.")
 
-        self.lines = lines[:]
+        self.lines = [line.strip(' ').rstrip('\n') for line in lines if line.strip(' ').rstrip('\n')]
 
     def has_line(self, index):
         return 0 <= index < len(self.lines)

@@ -18,15 +18,32 @@
 # or write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
-from smali.object_mapping import ObjectMapping
+import re
+import copy
+import smali.parser
+
+
+class MissingClassMethod(Exception):
+    pass
+
+
+class MethodUnavailable(Exception):
+    """In case the method is not found by the classloader."""
+    pass
 
 
 class VM(object):
-    """The virtual machine used by the emulator."""
+    """The virtual machine used by the emulator.
+
+    A new virtual machine must be use for each frame!.
+    """
+    LOCAL_VAR_NAME_PATTERN = re.compile('(p|v)\d+')
+
     def __init__(self, emulator):
 
-        self.emu = emulator  # we need the emulator instance in order to call its 'fatal' method.
-        self.mapping = ObjectMapping()  # holds the java->python objects and methods mapping
+        # we need the emulator instance in order to call its 'fatal' method.
+        # also, we are going to store the set of loaded classes into this object
+        self.emu = emulator
         self.labels = {}  # map of jump labels to opcodes offsets
         self.variables = {}  # variables container
         self.catch_blocks = []  # try/catch blocks container with opcodes offsets
@@ -64,10 +81,58 @@ class VM(object):
         self.emu.fatal("Unhandled exception '%s'." % str(e) )
 
     def new_instance(self, klass):
-        return self.mapping.new_instance(self, klass)
+        class_name = klass if klass else 'empty'
+        java_class_name = smali.parser.extract_class_name(klass) if klass else 'empty'
+
+        """Fix This; the new-instance opcode should be resolved according to the base class
+        being given on the line. Then the class resolver contained in the emulator member
+        must be used to resolve the base class, then invoke the corresponding new_instance
+        method."""
+
+        if java_class_name in self.emu.class_loader.loaded_classes:
+            java_class = self.emu.class_loader.loaded_classes[java_class_name]
+
+        elif class_name in self.emu.class_loader.loaded_classes:
+            java_class = self.emu.class_loader.loaded_classes[class_name]
+
+        else:
+            raise MethodUnavailable("Could not find method {}".format(class_name))
+
+        return java_class()
 
     def invoke(self, this, class_name, method_name, args):
-        self.mapping.invoke(self, this, class_name, method_name, args )
+        """Method used for internal class methods or static methods"""
+        method_name, signature, output_type = smali.parser.get_method_name_and_signature('.method ' + method_name)
+        method = (
+            this.methods.get(method_name)
+            or self.emu.classloader.methods.get(method_name)
+            or self.emu.javaclass.classloader.loadedclasses.get(class_name).methods.get(method_name)
+        )
+        assert method, "Unable to find method {}".format(method)
+        assert isinstance(this, smali.javaobject.JavaObject) or method.is_static, "Calling statically a non-static class."
+
+    @classmethod
+    def is_local_variable(cls, var):
+        return cls.LOCAL_VAR_NAME_PATTERN.match(var)
+
+    def get_new_frame(self):
+        new_vm = VM(self.emu)
+        new_vm.variables = self.backup_local_variables()
+        return new_vm
+
+    def clean_vm(self):
+        self.clean_local_variables()
+        self.stop = False
+        self.pc = 0  # start line number for running source code
+
+    def clean_local_variables(self):
+        backup = self.backup_local_variables()
+        [self.variables.pop(key) for key in backup]
+        return backup
+
+    def backup_local_variables(self):
+        return {key: value for key, value in self.variables.items() if self.is_local_variable(key)}
+
 
 
 

@@ -23,7 +23,9 @@ To run tests, do:
 pytest -v
 ```
 
-The project is not Python 3 compatible yet, but should be in a near future.
+The py3 compatibility has moved up, you should use pytest-3 whenever possible.
+However, python2 retrocompatibility should not be discarded, so use the two 
+test suites (pytest-2, pytest-3) to check the retrocompatibility in your changes.
 
 # Note
 

@@ -17,9 +17,22 @@
 # or write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 from __future__ import print_function
+from __future__ import division
 
-import re
 import ast
+import re
+import struct
+
+import smali.parser
+
+class UnavailableClass(Exception):
+    pass
+
+class UnavailableMethod(Exception):
+    pass
+
+class UnsupportedOperation(Exception):
+    pass
 
 # TODO: Implement missing opcodes.
 
@@ -77,16 +90,16 @@ class op_ConstString(OpCode):
 
     @staticmethod
     def eval(vm, vx, s):
-        vm[vx] = s.decode('unicode_escape')
+        vm[vx] = smali.objects.String(s)
 
 
 class op_Move(OpCode):
     """Evaluate a move."""
     def __init__(self):
-        OpCode.__init__(self, '^move(?:-object)? (.+),\s*(.+)')
+        OpCode.__init__(self, '^move(?:-object)?(/from\d+)? (.+),\s*(.+)')
 
     @staticmethod
-    def eval(vm, vx, vy):
+    def eval(vm, is_from, vx, vy):
         vm[vx] = vm[vy]
 
 
@@ -330,7 +343,7 @@ class op_DivIntLit(OpCode):
 
     @staticmethod
     def eval(vm, vx, vy, lit):
-        vm[vx] = vm[vy] / OpCode.get_int_value(lit)
+        vm[vx] = vm[vy] // OpCode.get_int_value(lit)
 
 
 class op_DivInt(OpCode):
@@ -339,7 +352,7 @@ class op_DivInt(OpCode):
 
     @staticmethod
     def eval(vm, vx, vy, vz):
-        vm[vx] = vm[vy] / vm[vz]
+        vm[vx] = vm[vy] // vm[vz]
 
 
 class op_DivIntLit(OpCode):
@@ -348,7 +361,7 @@ class op_DivIntLit(OpCode):
 
     @staticmethod
     def eval(vm, vx, vy, lit):
-        vm[vx] = vm[vy] / OpCode.get_int_value(lit)
+        vm[vx] = vm[vy] // OpCode.get_int_value(lit)
 
 
 class op_AddInt(OpCode):
@@ -430,14 +443,30 @@ class op_OrInt(OpCode):
 
 
 class op_ShlIntLit(OpCode):
-	#shl-int/lit8 vx, vy, lit8
+    # shl-int/lit8 vx, vy, lit8
     def __init__(self):
         OpCode.__init__(self, '^shl-int/lit\d+ (.+),\s*(.+),\s*(.+)')
 
     @staticmethod
     def eval(vm, vx, vy, lit):
-        vm[vx] = vm[vy] << OpCode.get_int_value(lit)
-	
+        vm[vx] = vm[vy] << (OpCode.get_int_value(lit) & 0x1f)
+
+
+class op_ShlInt(OpCode):
+    # shl-int/lit8 vx, vy, lit8
+    def __init__(self):
+        OpCode.__init__(self, '^shl-int (.+),\s+(.+),\s+(.+)')
+
+    @staticmethod
+    def eval(vm, vx, vy, vz):
+        """
+        >>> vm = {'v0': 0xff, 'v1': 0x00f0, 'v2': 0x03}
+        >>> op_ShlInt.eval(vm, 'v0', 'v1', 'v2')
+        >>> vm == {'v0': 0x780, 'v1': 0x00f0, 'v2': 0x3}
+        True
+        """
+        vm[vx] = (vm[vy] << (vm[vz] & 0x1f)) & 0xffffffff
+
 
 class op_GoTo(OpCode):
     def __init__(self):
@@ -484,16 +513,47 @@ class op_APut(OpCode):
 
 class op_Invoke(OpCode):
     def __init__(self):
-        OpCode.__init__(self, '^invoke-(?:[a-z]+) \{(.*)\},\s*(.+)')
+        OpCode.__init__(self, '^invoke-([a-z]+) \{(.*)\},\s*(.+)')
 
     @staticmethod
-    def eval(vm, args, call):
-        args = list(map(str.strip, args.split(',')))
-        this = args[0]
-        args = args[1:]
+    def eval(vm, invoke_type, args, call):
+        args = [arg.strip() for arg in args.split(',')]
         klass, method  = call.split(';->')
+        if invoke_type == 'direct' or invoke_type == 'virtual':
+            """Method call on an instance object. The class loader 
+            is irrelevant since we already have an python object at hand."""
+            this = args[0]
+            args = args[1:]
+            assert method in vm[this].methods(), "Object method not found"
+            this_object = vm[this]
+            arg_values = [vm[arg] for arg in args]
+            vm.return_v = this_object.invoke(method, arg_values)
+        elif invoke_type == 'static':
+            """The `this` object is not existant in this case.
+            We need to make a call to the class loader for this static method."""
+            arg_values = [vm[arg] for arg in args]
+            complete_class_name = klass + ';'
+            java_type_class_name = smali.parser.extract_class_name(complete_class_name)
+            if java_type_class_name in vm.emu.class_loader.loaded_classes:
+                java_class = vm.emu.class_loader.loaded_classes[java_type_class_name]
+            elif complete_class_name in vm.emu.class_loader.loaded_classes:
+                java_class = vm.emu.class_loader.loaded_classes[complete_class_name]
+            else:
+                raise UnavailableClass("Unable to load class {} from class loader".format(klass))
 
-        vm.invoke(this, klass, method, args)
+            try:
+                java_method = java_class.get_method(method)
+            except IndexError:
+                raise UnavailableMethod("Unable to find method {} in class {}".format(method, klass))
+
+            new_frame = vm.get_new_frame()
+            parameters = {'p{}'.format(position): vm[value] for position, value in enumerate(args)}
+            vm.emu.vm = new_frame
+            vm.return_v = vm.emu.run(java_method.source_code, args=parameters, vm=new_frame)
+            vm.clean_vm()
+
+        else:
+            raise UnsupportedOperation("OpCode not implemented for {}".format(invoke_type))
 
 
 class op_IntToType(OpCode):
@@ -503,11 +563,9 @@ class op_IntToType(OpCode):
     @staticmethod
     def eval(vm, ctype, vx, vy):
         if ctype == 'char':
-            vm[vx] = chr( vm[vy] & 0xFF )
+            vm[vx] = chr(vm[vy] & 0xFFFF)
         elif ctype == 'byte' :
-            a = vm[vy]
-            a1 = a << 24
-            vm[vx] = a1 >> 24
+            vm[vx] = struct.pack('>i', vm[vy])[-1]
         else:
             vm.emu.fatal("Unsupported type '%s' ." % ctype)
 
@@ -540,7 +598,12 @@ class op_Return(OpCode):
             vm.return_v = None
             vm.stop = True
         elif ctype in ( '-wide', '-object' ) or (ctype is None and vx is not None):
-            vm.return_v = vm[vx]
+            try:
+                vm.return_v = vm[vx].decode('ascii')
+            except AttributeError:
+                vm.return_v = vm[vx]
+
+
             vm.stop = True
 
         else:
@@ -612,6 +675,73 @@ class op_RSubInt(OpCode):
         constant = OpCode.get_int_value(constant)
         result = constant - source
         vm[destination] = result
+
+
+class op_ShrIntLit(OpCode):
+    """For ushr-int opcode.
+
+    >>> vm = {'v0': 65535, 'v1': 18}
+    >>> op_ShrIntLit.eval(vm, 'v1', 'v0', '0x8')
+    >>> vm == {'v0': 65535, 'v1': 255}
+    True
+    """
+
+    def __init__(self):
+        OpCode.__init__(self, '^shr-int/lit\d+\s+(\w+),\s+(\w+),\s+(\-?0x[0-9a-f]+)')
+
+    @staticmethod
+    def eval(vm, dest, source, constant):
+        vm[dest] = vm[source] >> (OpCode.get_int_value(constant) & 0x1f)
+
+
+class op_UshrIntLit(OpCode):
+    """For ushr-int opcode.
+
+    >>> vm = {'v0': 65535, 'v1': 18}
+    >>> op_UshrIntLit.eval(vm, 'v1', 'v0', '0x8')
+    >>> vm == {'v0': 65535, 'v1': 255}
+    True
+    """
+
+    def __init__(self):
+        OpCode.__init__(self, '^ushr-int/lit\d+\s+(\w+),\s+(\w+),\s+(\-?0x[0-9a-f]+)')
+
+    @staticmethod
+    def eval(vm, dest, source, constant):
+        vm[dest] = vm[source] >> (OpCode.get_int_value(constant) & 0x1f)
+
+
+class op_UshrInt(OpCode):
+    """For ushr-int opcode.
+
+    >>> vm = {'v0': 65535, 'v1': 255, 'v2': 2}
+    >>> op_UshrInt.eval(vm, 'v0', 'v1', 'v2')
+    >>> vm == {'v0': 63, 'v1': 255, 'v2': 2}
+    True
+    """
+
+    def __init__(self):
+        OpCode.__init__(self, '^ushr-int\s+(\w+),\s+(\w+),\s+(\w+)')
+
+    @staticmethod
+    def eval(vm, dest, source, constant):
+        vm[dest] = vm[source] >> (vm[constant] & 0x1f)
+
+
+class op_Nop(OpCode):
+    """For nop opcode.
+
+    >>> vm = {'v0': 1}
+    >>> op_Nop.eval()  # do nothing
+    >>> vm
+    {'v0': 1}
+    """
+    def __init__(self):
+        OpCode.__init__(self, '^nop$')
+
+    @staticmethod
+    def eval(*args):
+        pass
 
 
 class op_AddInt2Addr(OpCode):

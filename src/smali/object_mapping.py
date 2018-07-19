@@ -18,6 +18,8 @@
 # or write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
+
+
 import re
 
 from smali.parser import (
@@ -25,22 +27,14 @@ from smali.parser import (
 )
 from smali.objects.string import String
 from smali.objects.string_builder import StringBuilder
-from smali.objects.integer import Integer
+# from smali.objects.klass import Klass
 
 # This class holds the mapping of Java objects and methods to their Python respective.
 
 
 class ObjectMapping(object):
     def __init__(self):
-        self.mapping = {
-            String.name(): String.methods(),
-            StringBuilder.name(): StringBuilder.methods(),
-            Integer.name(): Integer.methods(),
-        }
-
-    @staticmethod
-    def __demangle_class_name(name):
-        return extract_class_name(name)
+        raise Exception("Deprecated class")
 
     def new_instance(self, vm, klass):
         """

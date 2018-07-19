@@ -19,13 +19,16 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 from __future__ import print_function
 
+import re
 import sys
 import time
+import warnings
 
 import smali
+import smali.javaclass
+import smali.vm
 
 from smali.opcodes import OpCode
-from smali.vm import VM
 from smali.source import Source, get_source_from_file
 from smali.preprocessors import (
     PackedSwitchPreprocessor,
@@ -55,17 +58,28 @@ class Emulator(object):
     """Global Emulator class. Represent a complete virtual machine.
 
     Instanciate this if you want to do some work on the smali file."""
-    def __init__(self, **kwargs):
+    def __init__(self, class_loader=None, current=None, **kwargs):
         # Code preprocessors.
-        self.preprocessors = [TryCatchPreprocessor, PackedSwitchPreprocessor, ArrayDataPreprocessor]
-
+        self.preprocessors = [
+            TryCatchPreprocessor,
+            PackedSwitchPreprocessor,
+            ArrayDataPreprocessor
+        ]
+        self.current_class = current  # current class being executed
         self.opcodes = []  # Opcodes handlers.
-        for op_code_symbol in [entry for entry in dir(smali.opcodes) if entry.startswith('op_')]:
+        for op_code_symbol in [
+            entry for entry in dir(smali.opcodes) if entry.startswith('op_')
+        ]:
             self.opcodes.append(getattr(smali.opcodes, op_code_symbol)())
 
-        self.vm = kwargs.get('vm') or VM(self)           # Instance of the virtual machine.
+        self.vm = kwargs.get('vm') or smali.vm.VM(self)           # Instance of the virtual machine.
         self.source = kwargs.get('source')               # Instance of the source file.
         self.stats = kwargs.get('stats') or Stats(self)  # Instance of the statistics object.
+        self.class_loader = class_loader
+
+    @property
+    def javaclasses(self):
+        return self.class_loader.loaded_classes
 
     def __preprocess(self):
         """
@@ -110,6 +124,7 @@ class Emulator(object):
         :param line: The line to check.
         :return: True if the line can be ignored, otherwise False.
         """
+        line = line.strip()
         return line == "" or line[0] == '#' or line[0] == ':' or line[0] == '.'
 
     def fatal(self, message):
@@ -124,10 +139,34 @@ class Emulator(object):
         sys.exit()
 
     def run_file(self, filename, args={}, trace=False):
+        warnings.warn(
+            "Feature deprecated, use load_class and exec_method instead",
+            DeprecationWarning
+        )
         return self.run(get_source_from_file(filename), args, trace)
 
     def run_source(self, source_code, args={}, trace=False):
+        warnings.warn(
+            "Feature deprecated, use load_class and exec_method instead",
+            DeprecationWarning
+        )
         return self.run(Source(lines=source_code), args, trace)
+
+    def load_class(self, filename, trace=False):
+        self.javaclasses = {} if not self.javaclasses else self.javaclasses
+        javaclass = smali.javaclass.JavaClassParser(filename)
+        self.javaclasses[javaclass.class_name] = javaclass
+
+    def exec_method(self, class_name, method_name, args=None, trace=False):
+        """Exec the method given the method_name and a list of arguments from
+        current javaclass."""
+        class_name = class_name or 'empty'
+        javaclass = self.javaclasses[class_name]
+        javaobj = javaclass()
+        # TODO: use a `class` object to get the method and execute it
+        method = smali.javaclass.resolve_method(method_name, args, javaobj.methods())
+        result = self.run(method.source_code, args=args, trace=trace, vm=self.vm)
+        return result
 
     def preproc_source(self, source_object=None):
         """Preprocess labels and try/catch blocks for fast lookup."""
@@ -138,8 +177,8 @@ class Emulator(object):
         self.stats.preproc = e - s
 
     def run(self, source_object, args=None, trace=False, vm=None):
-        """
-        Load a smali file and start emulating it.
+        """Load a smali file and start emulating it.
+
         :param source_object: A Source() instance containing the source code to run.
         :param args: A dictionary of optional initialization variables for the VM, used for arguments.
         :param trace: If true every opcode being executed will be printed.
@@ -147,16 +186,14 @@ class Emulator(object):
         """
         OpCode.trace = trace
         self.source = source_object
-        self.vm = VM(self) if not vm else vm
+        self.vm = smali.vm.VM(self) if not vm else vm
         self.stats = Stats(self)
 
         args = {} if not args else eval(args) if not isinstance(args, dict) else args
         self.vm.variables.update(args)
-
         self.preproc_source(self.source)
 
         # Loop each line and emulate.
-
         s = time.time() * 1000
         while self.vm.stop is False and self.source.has_line(self.vm.pc):
             self.stats.steps += 1
@@ -166,11 +203,18 @@ class Emulator(object):
             if self.__should_skip_line(line):
                 continue
 
-            elif self.__parse_line(line) is False:
+            success = self.__parse_line(line)
+
+            if not success:
                 self.fatal("Unsupported opcode.")
 
         e = time.time() * 1000
         self.stats.execution = e - s
-
+        self.vm.clean_vm()
         return self.vm.return_v
+
+
+class FrameEmulator(Emulator):
+    """Emulator Instance intended to run internal method of a class."""
+    pass
 

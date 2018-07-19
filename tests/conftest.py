@@ -29,17 +29,15 @@ def data_files(foldername):
     return files
 
 
-def run_source(source_code, input_params=None):
-    emu = Emulator()
-    ret = emu.run_source(source_code, args=input_params or {})
-    out = emu.vm.variables.copy()
-    out.update({'ret': ret})
-    return str(out)
-
-
 def static_method_calls():
     # 'staticmethod' folder must be in the current directory
-    return data_files('staticmethod')
+    return [
+        (os.path.join(os.path.dirname(__file__),
+                      'staticmethod', filename),
+         expected_result,
+         input_source)
+        for filename, expected_result, input_source in data_files('staticmethod')
+    ]
 
 
 def opcode_calls():

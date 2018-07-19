@@ -20,31 +20,29 @@
 # or write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
-# stdlib
-import fnmatch
-import os
+from __future__ import unicode_literals
 
 # 3d party
 import pytest
 
+import smali.classloader
+import smali.emulator
+
 # internal
 from .conftest import (
-    run_source,
     static_method_calls,
 )
 
 @pytest.mark.parametrize(
-    'filename, expected_result, input_source',
+    'filepath, expected_result, input_source',
     static_method_calls()
 )
-def test_all_files(filename, expected_result, input_source):
+def test_all_static_files(filepath, expected_result, input_source):
     test_params = eval(expected_result)
     expected_result = test_params.pop('ret')
-    assert filename.endswith('.smali')
-    assert (
-        expected_result
-        == eval(
-            run_source(input_source, input_params=test_params)
-        )['ret']
-    )
+    cl = smali.classloader.ClassLoader()
+    cl.load_class(filepath)
+    emu = smali.emulator.Emulator(class_loader=cl)
+    result = emu.run_source(input_source, args=test_params)
+    assert expected_result == result.internal
 
