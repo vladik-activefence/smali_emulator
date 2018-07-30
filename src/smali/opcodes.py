@@ -288,6 +288,14 @@ class op_MulIntLit(OpCode):
     def eval(vm, vx, vy, lit):
         vm[vx] = eval("%s * %s" % (vm[vy], lit))
 
+class op_MulNum2Addr(OpCode):
+    def __init__(self):
+        OpCode.__init__(self, '^mul-(\w+)/2addr (.+),\s*(.+)')
+
+    @staticmethod
+    def eval(vm, kind, vx, vy):
+        vm[vx] = vm[vx] * vm[vy]
+
 
 class op_XorInt2Addr(OpCode):
     def __init__(self):
@@ -398,6 +406,29 @@ class op_RemInt(OpCode):
     @staticmethod
     def eval(vm, vx, vy, vz):
         vm[vx] = vm[vy] % vm[vz]
+
+
+class op_DivLong(op_DivInt):
+    def __init__(self):
+        OpCode.__init__(self, r'^div-long (.+),\s*(.+),\s*(.+)')
+
+
+class op_SubLong2Addr(OpCode):
+    def __init__(self):
+        OpCode.__init__(self, '^sub-long/2addr (.+),\s*(.+)')
+
+    @staticmethod
+    def eval(vm, vx, vy):
+        vm[vx] = vm[vx] - vm[vy]
+
+
+class op_RemLong2Addr(OpCode):
+    def __init__(self):
+        OpCode.__init__(self, r'^rem-long/2addr (.+),\s*(.+)')
+
+    @staticmethod
+    def eval(vm, vx, vy):
+        vm[vx] = vm[vx] % vm[vy]
 
 
 class op_AndInt(OpCode):
@@ -522,10 +553,7 @@ class op_Invoke(OpCode):
         if invoke_type == 'direct' or invoke_type == 'virtual':
             """Method call on an instance object. The class loader 
             is irrelevant since we already have an python object at hand."""
-            this = args[0]
-            args = args[1:]
-            assert method in vm[this].methods(), "Object method not found"
-            this_object = vm[this]
+            this_object, args = vm[args[0]], args[1:]
             arg_values = [vm[arg] for arg in args]
             vm.return_v = this_object.invoke(method, arg_values)
         elif invoke_type == 'static':
@@ -562,12 +590,21 @@ class op_IntToType(OpCode):
 
     @staticmethod
     def eval(vm, ctype, vx, vy):
-        if ctype == 'char':
+        if ctype == 'long':
+            vm[vx] = (vm[vy] & 0xFFFFFFFFFFFFFFFF)
+        elif ctype == 'int':
+            vm[vx] = (vm[vy] & 0xFFFFFFFF)
+        elif ctype == 'char':
             vm[vx] = chr(vm[vy] & 0xFFFF)
         elif ctype == 'byte' :
             vm[vx] = struct.pack('>i', vm[vy])[-1]
         else:
             vm.emu.fatal("Unsupported type '%s' ." % ctype)
+
+
+class op_LongToType(op_IntToType):
+    def __init__(self):
+        OpCode.__init__(self, '^long-to-([a-z]+) (.+),\s*(.+)')
 
 
 class op_SPut(OpCode):

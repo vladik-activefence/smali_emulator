@@ -82,11 +82,10 @@ def test_exception_messages_0x0001(p0, p1, p2, expected):
 
 @pytest.mark.parametrize(
     'input_args,expected', [
-        ({'p0': 0x7, 'p1': 0x25, 'p2': 0x1}, 'Invalid truncation length'),
-        ({'p0': 2**43 - 1, 'p1': 7}, (2**43 - 1) % (10**7)),
+        ({'p0': 2**43 - 1, 'p1': 7}, list(str((2**43 - 1) % (10**7)))),
     ]
 )
-def test_exception_messages_0x0002(input_args, expected):
+def test_exception_messages_0x0002_a(input_args, expected):
     """
     Test two successive calls:
 
@@ -99,9 +98,25 @@ def test_exception_messages_0x0002(input_args, expected):
                              'ExceptionMessagesAndModulusStuff0x0002.smali')
     cl = smali.classloader.ClassLoader()
     loaded_class = cl.load_class(javapath)
-    emulator = smali.emulator.Emulator(class_loader=cl)
-    emulator.exec_method(loaded_class.__name__, '<clinit>', args=None, )
-    res = emulator.exec_method(loaded_class.__name__, 'a', args=input_args)
+    new_object = loaded_class(emulator=smali.emulator.Emulator(class_loader=cl))
+    new_object.invoke('<clinit>()V', {})
+    res = new_object.invoke('a(JI)[B', input_args)
+    assert res == expected
+
+
+@pytest.mark.parametrize(
+    'input_args,expected', [
+        ({'p0': 0x7, 'p1': 0x25, 'p2': 0x1}, 'Invalid truncation length'),
+    ]
+)
+def test_exception_messages_0x0002_b(input_args, expected):
+    java_path = get_file_path('completeclass',
+                             'ExceptionMessagesAndModulusStuff0x0002.smali')
+    cl = smali.classloader.ClassLoader()
+    loaded_class = cl.load_class(java_path)
+    new_object = loaded_class(emulator=smali.emulator.Emulator(class_loader=cl))
+    new_object.invoke('<clinit>()V', {})
+    res = new_object.invoke('a(III)Ljava/lang/String;', input_args)
     assert res == expected
 
 
