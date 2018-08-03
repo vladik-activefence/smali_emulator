@@ -124,15 +124,13 @@ def test_exception_messages_0x0002_b(input_args, expected):
     'p0, expected', [(u"\uf38e\u9d56\u5f62\u72f1\u14ff\u6aa0", None)]
 )
 def test_class_with_init(p0, expected):
-    pytest.xfail("not ready yet")
     orange_file = get_file_path('completeclass', 'protected_app.smali')
     cl = smali.classloader.ClassLoader()
-    orange_class = cl.load_class(orange_file)
-    orange_obj = orange_class()
     emulator = smali.emulator.Emulator(class_loader=cl)
-    parsed_class = smali.javaclass.JavaClassParser(orange_file)
-    emulator.exec_method(parsed_class.class_name, '<clinit>', args=None)
-    emulator.exec_method(parsed_class.class_name, 'i10725', args=None)
-    res = emulator.exec_method(parsed_class.class_name, 'a', args={'p0': p0})
+    _class = cl.load_class(orange_file)
+    _obj = _class(emulator=emulator)
+    _obj.invoke('<clinit>()V', {})
+    _obj.invoke('i10725()V', {})
+    res = _obj.invoke('a(Ljava/lang/String;)Ljava/lang/String;', {'p0': p0})
     assert res == expected.decode('ascii')
 
