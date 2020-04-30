@@ -26,7 +26,8 @@ class MissingSource(Exception):
 
 
 def get_source_from_file(filename):
-    with open(filename, 'r') as fd: source_code = Source(lines=fd.readlines())
+    with open(filename, encoding='utf-8') as fd:
+        source_code = Source(lines=fd.readlines())
     return source_code
 
 
