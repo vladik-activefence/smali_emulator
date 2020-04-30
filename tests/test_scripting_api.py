@@ -56,6 +56,7 @@ def test_full_static_class_with_init(p0, p1, p2, expected):
     assert res.internal == expected
 
 
+@pytest.mark.skip
 @pytest.mark.parametrize(
     'p0,p1,p2,expected', [
         (0x15, 0, 0, 'Unsupported provisioning protocol version'),
