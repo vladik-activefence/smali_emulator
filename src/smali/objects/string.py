@@ -49,7 +49,7 @@ class String(BaseClass):
         }
 
     def __eq__(self, other):
-        if isinstance(other, (basestring, str, unicode)):
+        if isinstance(other, str):
             return (not(other) and not self.internal) or other == self.internal
         elif isinstance(other, String):
             return other.internal == self.internal
