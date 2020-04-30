@@ -47,6 +47,7 @@ class OpCode(object):
     def get_int_value(val):
         val = val.rstrip('t')  # for byte elements
         val = val.rstrip('s')  # for short elements
+        val = val.rstrip('L')  # for longs
         return ast.literal_eval(val)
 
     def parse(self, line, vm):
