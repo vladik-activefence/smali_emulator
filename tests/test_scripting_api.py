@@ -12,7 +12,7 @@ import smali.classloader
 def get_file_path(datadir, filename):
     return os.path.join(
         os.path.dirname(smali.__file__),
-        os.pardir, os.pardir, 'tests',
+        os.pardir, 'tests',
         datadir, filename
     )
 
