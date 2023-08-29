@@ -19,6 +19,7 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
 from .baseclass import BaseClass
+from .string import String
 
 class StringBuilder(BaseClass):
     """Fake the string builder class of Java."""
@@ -54,7 +55,11 @@ class StringBuilder(BaseClass):
             return other.internal == self.internal
 
     def append(self, *args):
-        self.internal += args[0]
+        if isinstance(args[0], String):
+            self.internal += args[0].repr_intern()
+        else:
+            self.internal += args[0]
+        return self
 
     def tostring(self):
         return self.internal
